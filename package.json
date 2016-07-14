@@ -1,0 +1,9 @@
+{
+    "name": "Environment",
+    "version": "0.0.1",
+    "private": "false",
+    "dependencies": {
+        "jquery": "3.1.0",
+        "jsdom": "9.4.1"
+    }
+}
