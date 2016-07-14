@@ -1,0 +1,4 @@
+startDate| keywords| status| imageUrl| expiryDate| useDates| type| url| keywordsFieldType| expiryCount| title| priority| description| keywordsUrl
+<nil>| test| active| <nil>| <nil>| false| TEXT| http://edition.cnn.com| STRING| -1| Featured Ad| A| test featured ad| <nil>
+10/Oct/2014| test| active| <nil>| 31/Oct/2014| true| TEXT| http://edition.cnn.com| STRING| -1| Featured ad2| A| test| <nil>
+
