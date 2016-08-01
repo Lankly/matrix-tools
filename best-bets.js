@@ -185,7 +185,7 @@ require("jsdom").env("", function(err, window) {
                 }
                 //Next term surrounded by quotes?
                 else if(line.slice(0,1) == '"'){
-                    cur = line.substring(1, line.substring(1).indexOf('"'));
+                    cur = line.substring(1, line.substring(1).indexOf('"')+1);
                     line = line.substring(line.slice(1).indexOf('"') + 2);
                     line = line.substring(line.indexOf(",") + 1);
                 }
@@ -197,7 +197,8 @@ require("jsdom").env("", function(err, window) {
                 line = line.trim();
 
                 //Remove surrounding quotes, any pipes
-                cur = cur.replace(/^"(.+(?="$))"$/, '$1');
+                cur = cur.replace(/^"/, "");
+                cur = cur.replace(/"$/, "");
                 cur = cur.replace(/\|/g, "-");
 
                 //Add to object
