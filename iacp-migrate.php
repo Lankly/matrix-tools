@@ -12,12 +12,15 @@
   Domain Path: /languages
 */
 
+/* OPTIONS */
 define("DEBUG", true); /* Set to false to disable all other DEBUGs. */
 define("DEBUG_CREDS", DEBUG && true); /* Set to true to echo serv, un, pw. */
 define("DEBUG_DATA", DEBUG && false); /* Set to true to echo all the data. */
 define("DEBUG_FIRST_LINE", DEBUG && true);
                      /* Set to true to echo all the fields of the first line. */
+define("USE_WINDOWS_AUTH", true); /* Use Windows Auth to connect to db. */
 
+/* CONSTANTS */
 define("FIELD_REQUIRED", true);
 define("FIELD_NOT_REQUIRED", false);
 define("COLUMN_NOT_FOUND", -1);
@@ -33,6 +36,10 @@ if(DEBUG_FIRST_LINE){
 }
 if(DEBUG){
     echo PHP_EOL;
+}
+if(USE_WINDOWS_AUTH){
+    echo "Will use Windows Authorization to connect to database." . PHP_EOL
+                                                                  . PHP_EOL;
 }
 
 /* This class is basically just a struct for holding information about field
@@ -135,46 +142,44 @@ function iacp_format_line($line){
 }
 
 
-$iacp_serv = ""; $iacp_db = ""; $iacp_un = ""; $iacp_pw = "";
-/* Sets the above variables to their corresponding entry in the file.
+/* Returns the credentials in the credential file in an associative array.
  */
 function iacp_read_credentials(){
+    $to_return = [
+        "server" => "",
+        "database" => "",
+        "table" => "",
+        "username" => "",
+        "password" => ""
+    ];
+    
     $filename = "credentials.txt";
     $f = fopen($filename, "r") or die("Unable to open file!");
 
-    if(DEBUG_CREDS){echo PHP_EOL . "Beginning read..." . PHP_EOL;}
+    if(DEBUG_CREDS){echo "Beginning read..." . PHP_EOL;}
 
-    //SERVER 
-    $line = fgets($f) or die("Credentials empty!");
-    //No need for a PHP_EOL on this echo since $line will contain a newline
-    if(DEBUG_CREDS){echo substr($line, 0, strlen($line) - 2);}
-    $index = strpos($line, ":");
-    $iacp_serv = trim(substr($line, $index + 1));
-    if(DEBUG_CREDS){echo " (" . $iacp_serv . ")" . PHP_EOL;}
+    while(!empty($line = fgets($f))){
+        //No need for a PHP_EOL on this echo since $line will contain a newline
+        if(DEBUG_CREDS){
+            echo substr($line, 0, strlen($line) - 2);
+        }
+        
+        $index = strpos($line, ":");
+        $field = substr($line, 0, $index);
+        $to_return[$field] = trim(substr($line, $index + 1));
+        
+        if(DEBUG_CREDS){
+            echo " ("
+                . $to_return[$field] . ")"
+                . PHP_EOL;
+        }
+    }
 
-    //DATABASE
-    $line = fgets($f) or die("Credentials empty!");
-    if(DEBUG_CREDS){echo substr($line, 0, strlen($line) - 2);}
-    $index = strpos($line, ":");
-    $iacp_db = trim(substr($line, $index + 1));
-    if(DEBUG_CREDS){echo " (" . $iacp_db . ")" . PHP_EOL;}
+    if(DEBUG_CREDS){
+        echo "Done read." . PHP_EOL . PHP_EOL;
+    }
     
-    //USERNAME
-    $line = fgets($f) or die("Missing username!!");
-    if(DEBUG_CREDS){echo substr($line, 0, strlen($line) - 2);}
-    $index = strpos($line, ":") or die("Invalid username!");
-    $iacp_un = trim(substr($line, $index + 1));
-    if(DEBUG_CREDS){echo " (" . $iacp_un . ")" . PHP_EOL;}
-
-    //PASSWORD
-    $line = fgets($f) or die("Missing password!!");
-    if(DEBUG_CREDS){echo substr($line, 0, strlen($line) - 2);}
-    $index = strpos($line, ":") or die("Invalid password!");
-    $iacp_pw = trim(substr($line, $index + 1));   
-    if(DEBUG_CREDS){echo " (" . $iacp_pw . ")" . PHP_EOL;}
-
-    //If we were printing out stuff, space it nicely.
-    if(DEBUG_CREDS){echo "Done read." . PHP_EOL . PHP_EOL;}
+    return $to_return;
 }
 
 /* We're going to grab the first csv file in this directory and break it up into
@@ -188,7 +193,30 @@ function iacp_read_credentials(){
 function iacp_get_data(){
     $to_return = [];
     
-    iacp_read_credentials();
+    $iacp = iacp_read_credentials();
+
+    // Create connection
+    if(DEBUG_CREDS){
+        echo "Connecting to server \"" . $iacp["server"] . "\"..." . PHP_EOL;
+    }
+    $conn = (USE_WINDOWS_AUTH ?
+             sqlsrv_connect($iacp["server"],[
+                 "Database" => $iacp["database"],
+                 "ConnectionPooling" => 0
+             ])
+             :
+             sqlsrv_connect($iacp["server"],[
+                 "Database" => $iacp["database"],
+                 "UID" => $iacp["username"],
+                 "PWD" => $iacp["password"],
+                 "ConnectionPooling" => 0
+             ])) or die ("Failed to connect to server :(");
+
+    if(!empty($conn)){
+        echo "Closing connection...    ";
+        sqlsrv_close($conn);
+    }
+    echo "Connection Closed." . PHP_EOL . PHP_EOL;
     
     return $to_return;
 }
