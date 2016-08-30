@@ -13,18 +13,15 @@
 */
 
 /* OPTIONS */
-define("DEBUG", true); /* Set to false to disable all other DEBUGs. */
-define("DEBUG_CREDS", DEBUG && true); /* Set to true to echo serv, un, pw. */
-define("DEBUG_DATA", DEBUG && false); /* Set to true to echo all the data. */
-define("DEBUG_FIRST_LINE", DEBUG && true);
-                     /* Set to true to echo all the fields of the first line. */
-define("USE_WINDOWS_AUTH", true); /* Use Windows Auth to connect to db. */
+define("DEBUG", true);           /* Set to false to disable all other DEBUGs. */
+define("DEBUG_CREDS", DEBUG && false);        /* Echo credentials information */
+define("DEBUG_DATA", DEBUG && false);         /* Echo all exported data. */
+define("DEBUG_FIRST_LINE", DEBUG && false);   /* Echo first line information. */
+define("DEBUG_QUERY", DEBUG && true);         /* Echo query information. */
+define("USE_CONNECTION_POOLING", false); /* Make a new connection every time? */
+define("USE_WINDOWS_AUTH", true);       /* Use Windows Auth to connect to db? */
 
-/* CONSTANTS */
-define("FIELD_REQUIRED", true);
-define("FIELD_NOT_REQUIRED", false);
-define("COLUMN_NOT_FOUND", -1);
-
+/* Tell the user what options are in use. */
 if(DEBUG_CREDS){
     echo "Credentials debugging enabled." . PHP_EOL;
 }
@@ -34,13 +31,23 @@ if(DEBUG_DATA){
 if(DEBUG_FIRST_LINE){
     echo "First-line debugging enabled." . PHP_EOL;
 }
-if(DEBUG){
+if(DEBUG_CREDS || DEBUG_DATA || DEBUG_FIRST_LINE){
     echo PHP_EOL;
 }
-if(USE_WINDOWS_AUTH){
-    echo "Will use Windows Authorization to connect to database." . PHP_EOL
-                                                                  . PHP_EOL;
+if(USE_CONNECTION_POOLING){
+    echo "Connection Pooling for database connection enabled." . PHP_EOL;
 }
+if(USE_WINDOWS_AUTH){
+    echo "Windows Authorization for database connection enabled." . PHP_EOL;
+}
+if(USE_CONNECTION_POOLING || USE_WINDOWS_AUTH){
+    echo PHP_EOL;
+}
+
+/* CONSTANTS */
+define("FIELD_REQUIRED", true);
+define("FIELD_NOT_REQUIRED", false);
+define("COLUMN_NOT_FOUND", -1);
 
 /* This class is basically just a struct for holding information about field
  * names and where they are.
@@ -63,14 +70,14 @@ class IACPField {
  * has been read, the program should fail.
  */
 $iacp_fields_array = [
-    new IACPField("Article Title", "Article Title", FIELD_REQUIRED),
-    new IACPField("Article Text", "Article Text", FIELD_REQUIRED),
-    new IACPField("Author", "Author", FIELD_REQUIRED),
-    new IACPField("Issue Date", "Issue Date", FIELD_REQUIRED),
-    new IACPField("Description", "Description", FIELD_REQUIRED),
-    new IACPField("Volume Number", "Volume Number", FIELD_REQUIRED),
-    new IACPField("Issue Number", "Issue Number", FIELD_REQUIRED),
-    new IACPField("Cover Image", "Cover Image", FIELD_REQUIRED)
+    new IACPField("article_title", "", FIELD_REQUIRED),
+    new IACPField("article_text", "", FIELD_REQUIRED),
+    new IACPField("issue_month", "", FIELD_REQUIRED),
+    new IACPField("issue_year", "", FIELD_REQUIRED),
+    new IACPField("issue_description", "", FIELD_REQUIRED),
+    new IACPField("volume", "", FIELD_REQUIRED),
+    new IACPField("issue_id", "", FIELD_REQUIRED),
+    new IACPField("cover_filename", "", FIELD_REQUIRED),
 ];
 
 /* Handles all of reading a given first line of a csv file to figure out where
@@ -141,6 +148,20 @@ function iacp_format_line($line){
     return $to_return;
 }
 
+function iacp_get_connection_info($creds){
+    $connectionInfo = [];
+    
+    $connectionInfo["Database"] = $creds["database"];
+    if(!USE_CONNECTION_POOLING){
+        $connectionInfo["ConnectionPooling"] = 0;
+    }
+    if(!USE_WINDOWS_AUTH){
+        $connectionInfo["UID"] = $creds["username"];
+        $connectionInfo["PWD"] = $creds["password"];
+    }
+
+    return $connectionInfo;
+}
 
 /* Returns the credentials in the credential file in an associative array.
  */
@@ -175,6 +196,13 @@ function iacp_read_credentials(){
         }
     }
 
+    //If any of the fields wasn't found, fail
+    foreach((array)$to_return as $key => $field){
+        if(empty($field)){
+            die("Missing " . $key . "!" . PHP_EOL);
+        }
+    }
+    
     if(DEBUG_CREDS){
         echo "Done read." . PHP_EOL . PHP_EOL;
     }
@@ -184,7 +212,7 @@ function iacp_read_credentials(){
 
 /* We're going to grab the first csv file in this directory and break it up into
  * something we can use. This function is separate so that if we want to turn it
- * into something that performs queries directly on a database, we wouldn't have
+ * into something that performs operations directly on a csv file, we won't have
  * to change any other functions.
  *
  * Returns an array of arrays of strings that represent all the data we are
@@ -192,28 +220,21 @@ function iacp_read_credentials(){
  */
 function iacp_get_data(){
     $to_return = [];
+    $creds = iacp_read_credentials();
+
+    //Create the connection information array, taking into account options
+    $connectionInfo = iacp_get_connection_info($creds);
+
+    // Actually create connection
+    echo "Connecting to " . $creds["server"] . "... ";
+    $conn = sqlsrv_connect($creds["server"], $connectionInfo) or die("Failed.");
+    echo "Success." . PHP_EOL;
+
     
-    $iacp = iacp_read_credentials();
 
-    // Create connection
-    if(DEBUG_CREDS){
-        echo "Connecting to server \"" . $iacp["server"] . "\"..." . PHP_EOL;
-    }
-    $conn = (USE_WINDOWS_AUTH ?
-             sqlsrv_connect($iacp["server"],[
-                 "Database" => $iacp["database"],
-                 "ConnectionPooling" => 0
-             ])
-             :
-             sqlsrv_connect($iacp["server"],[
-                 "Database" => $iacp["database"],
-                 "UID" => $iacp["username"],
-                 "PWD" => $iacp["password"],
-                 "ConnectionPooling" => 0
-             ])) or die ("Failed to connect to server :(");
-
+    // Close connection when done.
     if(!empty($conn)){
-        echo "Closing connection...    ";
+        echo "Closing connection...  ";
         sqlsrv_close($conn);
     }
     echo "Connection Closed." . PHP_EOL . PHP_EOL;
