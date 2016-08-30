@@ -13,6 +13,7 @@
 */
 
 define("DEBUG", true); /* Set to false to disable all other DEBUGs. */
+define("DEBUG_CREDS", DEBUG && true); /* Set to true to echo serv, un, pw. */
 define("DEBUG_DATA", DEBUG && false); /* Set to true to echo all the data. */
 define("DEBUG_FIRST_LINE", DEBUG && true);
                      /* Set to true to echo all the fields of the first line. */
@@ -21,11 +22,17 @@ define("FIELD_REQUIRED", true);
 define("FIELD_NOT_REQUIRED", false);
 define("COLUMN_NOT_FOUND", -1);
 
+if(DEBUG_CREDS){
+    echo "Credentials debugging enabled." . PHP_EOL;
+}
 if(DEBUG_DATA){
     echo "Data debugging enabled." . PHP_EOL;
 }
 if(DEBUG_FIRST_LINE){
     echo "First-line debugging enabled." . PHP_EOL;
+}
+if(DEBUG){
+    echo PHP_EOL;
 }
 
 /* This class is basically just a struct for holding information about field
@@ -127,6 +134,49 @@ function iacp_format_line($line){
     return $to_return;
 }
 
+
+$iacp_serv = ""; $iacp_db = ""; $iacp_un = ""; $iacp_pw = "";
+/* Sets the above variables to their corresponding entry in the file.
+ */
+function iacp_read_credentials(){
+    $filename = "credentials.txt";
+    $f = fopen($filename, "r") or die("Unable to open file!");
+
+    if(DEBUG_CREDS){echo PHP_EOL . "Beginning read..." . PHP_EOL;}
+
+    //SERVER 
+    $line = fgets($f) or die("Credentials empty!");
+    //No need for a PHP_EOL on this echo since $line will contain a newline
+    if(DEBUG_CREDS){echo substr($line, 0, strlen($line) - 2);}
+    $index = strpos($line, ":");
+    $iacp_serv = trim(substr($line, $index + 1));
+    if(DEBUG_CREDS){echo " (" . $iacp_serv . ")" . PHP_EOL;}
+
+    //DATABASE
+    $line = fgets($f) or die("Credentials empty!");
+    if(DEBUG_CREDS){echo substr($line, 0, strlen($line) - 2);}
+    $index = strpos($line, ":");
+    $iacp_db = trim(substr($line, $index + 1));
+    if(DEBUG_CREDS){echo " (" . $iacp_db . ")" . PHP_EOL;}
+    
+    //USERNAME
+    $line = fgets($f) or die("Missing username!!");
+    if(DEBUG_CREDS){echo substr($line, 0, strlen($line) - 2);}
+    $index = strpos($line, ":") or die("Invalid username!");
+    $iacp_un = trim(substr($line, $index + 1));
+    if(DEBUG_CREDS){echo " (" . $iacp_un . ")" . PHP_EOL;}
+
+    //PASSWORD
+    $line = fgets($f) or die("Missing password!!");
+    if(DEBUG_CREDS){echo substr($line, 0, strlen($line) - 2);}
+    $index = strpos($line, ":") or die("Invalid password!");
+    $iacp_pw = trim(substr($line, $index + 1));   
+    if(DEBUG_CREDS){echo " (" . $iacp_pw . ")" . PHP_EOL;}
+
+    //If we were printing out stuff, space it nicely.
+    if(DEBUG_CREDS){echo "Done read." . PHP_EOL . PHP_EOL;}
+}
+
 /* We're going to grab the first csv file in this directory and break it up into
  * something we can use. This function is separate so that if we want to turn it
  * into something that performs queries directly on a database, we wouldn't have
@@ -136,39 +186,14 @@ function iacp_format_line($line){
  * trying to move.
  */
 function iacp_get_data(){
-    $files = glob("*.csv");
-    if(empty($files)){
-        die("Could not find csv file!");
-    }
-    
-    $file = $files[0];
-    $f = fopen($file, "r") or die("Unable to open file!");
-    $first_line = fgets($f);
-
-    //First line is special
-    iacp_read_first_line($first_line);
-
-    //All other lines just go into an array. Stops on empty line or EOF.
     $to_return = [];
-    while(!empty($line = fgets($f))){
-        $to_return[] = iacp_format_line($line);
-    }
-
-    /* I'm not really that familiar with PHP, and I was getting an error saying
-     * that the file was already closed, so I guess files close themselves when
-     * you reach the end? Either way, this quick check to make sure the pointer
-     * is not null before closing it can't hurt.
-     */
-    if($myfile){
-        fclose($myfile);
-    }
-
+    
+    iacp_read_credentials();
+    
     return $to_return;
 }
 
-
 function iacp_migrate(){
-    echo "Reading data..." . PHP_EOL;
     $data = iacp_get_data();
     $counter = 1;
     
