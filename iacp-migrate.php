@@ -70,6 +70,8 @@ class IACPField {
     }
 }
 
+/* GLOBALS */
+
 /* Every field in this array is one that will be mapped to a field in the new
  * database. If any of the fields still have the default value after the file
  * has been read, the program should fail.
@@ -77,17 +79,25 @@ class IACPField {
  * The first parameter is the name of a field in the database we're exporting
  * from. The second is that same field in the database we're importing to. If
  * you want two fields to become one, change the query to combine them first.
+ *
+ * Please see the documentation for wp_insert_post(). The second field should
+ * be one of the names under $postarr.
  */
 $iacp_fields_array = [
-    new IACPField("article_id", "", FIELD_REQUIRED),
-    new IACPField("article_title", "", FIELD_NOT_REQUIRED),
-    new IACPField("article_text", "", FIELD_NOT_REQUIRED),
-    new IACPField("issue_date", "", FIELD_NOT_REQUIRED),
+    new IACPField("article_id", "ID", FIELD_REQUIRED),
+    new IACPField("article_title", "post_title", FIELD_NOT_REQUIRED),
+    new IACPField("article_text", "post_content", FIELD_NOT_REQUIRED),
+    new IACPField("issue_date", "post_date", FIELD_NOT_REQUIRED),
     new IACPField("issue_description", "", FIELD_NOT_REQUIRED),
     new IACPField("volume", "", FIELD_NOT_REQUIRED),
     new IACPField("issue_id", "", FIELD_NOT_REQUIRED),
     new IACPField("cover_filename", "", FIELD_NOT_REQUIRED),
 ];
+
+$wp_username = "";
+$wp_password = "";
+
+/* FUNCTIONS */
 
 /* This function should only ever be called after iacp_read_first_line. It
  * expects the col_num field of the 
@@ -168,7 +178,9 @@ function iacp_read_credentials(){
         "database" => "",
         "table" => "",
         "username" => "",
-        "password" => ""
+        "password" => "",
+        "wp-username" => "",
+        "wp-password" => ""
     ];
     
     $filename = "credentials.txt";
@@ -182,7 +194,17 @@ function iacp_read_credentials(){
         if(DEBUG_CREDS){
             echo substr($line, 0, strlen($line) - 2);
         }
-        
+
+        /* Each line in the credentials file is formatted like:
+         *
+         * field: value
+         *
+         * And each of the fields in $to_return should match to a field
+         * somewhere in the credentials file. So, in order to determine
+         * the field on each line, all we have to do is get the colon's
+         * index on the line. Everything before the index is the field,
+         * and everything after the index is the value.
+         */
         $index = strpos($line, ":");
         $field = substr($line, 0, $index);
         $to_return[$field] = trim(substr($line, $index + 1));
@@ -227,6 +249,9 @@ function iacp_get_data(){
     
     //Create the connection information array, taking into account options
     $connectionInfo = iacp_get_connection_info($creds);
+    //Quickly store the WP creds
+    $wp_username = $creds["wp-username"];
+    $wp_password = $creds["wp-password"];
 
     // Actually create connection
     echo "Connecting to " . $creds["server"] . "... ";
