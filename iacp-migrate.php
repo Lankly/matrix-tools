@@ -343,7 +343,7 @@ function iacp_migrate(){
         }
 
         //Insert the post!
-        $post_arr["meta_input"] = $meta_input;
+        $postarr["meta_input"] = $meta_input;
         wp_insert_post($postarr);
 
         if(DEBUG_DATA){ echo PHP_EOL; }
