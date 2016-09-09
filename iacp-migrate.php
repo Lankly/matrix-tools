@@ -20,10 +20,10 @@ define("DEBUG", true);           /* Set to false to disable all other DEBUGs. */
 define("DEBUG_CREDS", DEBUG && false);        /* Echo credentials information */
 define("DEBUG_DATA", DEBUG && false);         /* Echo all exported data. */
 define("DEBUG_FIRST_LINE", DEBUG && false);   /* Echo first line information. */
-define("DEBUG_QUERY", DEBUG && true);        /* Echo complete query. */
+define("DEBUG_QUERY", DEBUG && false);        /* Echo complete query. */
 define("DEBUG_QUERY_RESULTS", DEBUG && false);/* Echo the query results. */
 define("USE_CONNECTION_POOLING", false); /* Make a new connection every time? */
-define("USE_WINDOWS_AUTH", true);       /* Use Windows Auth to connect to db? */
+define("USE_WINDOWS_AUTH", false);      /* Use Windows Auth to connect to db? */
 
 /* Tell the user what options are in use. */
 if(DEBUG_CREDS){
@@ -49,7 +49,6 @@ if(USE_CONNECTION_POOLING || USE_WINDOWS_AUTH){
 }
 
 /* CONSTANTS */
-define("COLUMN_NOT_FOUND", -1);
 define("DEBUG_LINE_WIDTH", 80);
 define("FIELD_NOT_REQUIRED", false);
 define("FIELD_REQUIRED", true);
@@ -58,15 +57,15 @@ define("FIELD_REQUIRED", true);
  * names and where they are.
  */
 class IACPField {
-    public $orig_name; /*Field in the csv*/
-    public $new_name;  /*Field in the WP db*/
-    public $required;  /*Whether or not the field can be blank*/
-    public $col_num;   /*Which column in the data is this field*/
-    function __construct($orig_name, $new_name, $req){
+    public $is_cust_field; /* True if this is a custom field in WP */
+    public $new_name;  /* Field in the WP db */
+    public $orig_name; /* Field in the csv */
+    public $required;  /* Whether or not the field can be blank */
+    function __construct($orig_name, $new_name, $req, $cust = false){
         $this->orig_name = $orig_name;
         $this->new_name = $new_name;
         $this->required = $req;
-        $this->col_num = COLUMN_NOT_FOUND;
+        $this->is_cust_field = $cust;
     }
 }
 
@@ -76,26 +75,21 @@ class IACPField {
  * database. If any of the fields still have the default value after the file
  * has been read, the program should fail.
  *
- * The first parameter is the name of a field in the database we're exporting
+ * The first parameter is the name of a column from the query we're exporting
  * from. The second is that same field in the database we're importing to. If
  * you want two fields to become one, change the query to combine them first.
  *
  * Please see the documentation for wp_insert_post(). The second field should
- * be one of the names under $postarr.
+ * be one of the names under $postarr or the name of a custom field. If it is
+ * a custom field, "true" should be passed as a fourth parameter.
  */
 $iacp_fields_array = [
     new IACPField("article_id", "ID", FIELD_REQUIRED),
     new IACPField("article_title", "post_title", FIELD_NOT_REQUIRED),
     new IACPField("article_text", "post_content", FIELD_NOT_REQUIRED),
-    new IACPField("issue_date", "post_date", FIELD_NOT_REQUIRED),
-    new IACPField("issue_description", "", FIELD_NOT_REQUIRED),
-    new IACPField("volume", "", FIELD_NOT_REQUIRED),
-    new IACPField("issue_id", "", FIELD_NOT_REQUIRED),
-    new IACPField("cover_filename", "", FIELD_NOT_REQUIRED),
+    new IACPField("author", "post_author", FIELD_NOT_REQUIRED, true),
+    new IACPField("issue_date", "post_date", FIELD_NOT_REQUIRED)
 ];
-
-$wp_username = "";
-$wp_password = "";
 
 /* FUNCTIONS */
 
@@ -178,9 +172,7 @@ function iacp_read_credentials(){
         "database" => "",
         "table" => "",
         "username" => "",
-        "password" => "",
-        "wp-username" => "",
-        "wp-password" => ""
+        "password" => ""
     ];
     
     $filename = "credentials.txt";
@@ -240,8 +232,8 @@ function iacp_read_credentials(){
  * into something that performs operations directly on a csv file, we won't have
  * to change any other functions.
  *
- * Returns an array of arrays of strings that represent all the data we are
- * trying to move.
+ * Returns an array of arrays of strings that represent all the data that we are
+ * trying to move. Each string is in the order of $iacp_fields_array.
  */
 function iacp_get_data(){
     global $iacp_fields_array;
@@ -249,9 +241,6 @@ function iacp_get_data(){
     
     //Create the connection information array, taking into account options
     $connectionInfo = iacp_get_connection_info($creds);
-    //Quickly store the WP creds
-    $wp_username = $creds["wp-username"];
-    $wp_password = $creds["wp-password"];
 
     // Actually create connection
     echo "Connecting to " . $creds["server"] . "... ";
@@ -325,6 +314,7 @@ function iacp_get_data(){
 /* Performs the data migration.
  */
 function iacp_migrate(){
+    global $iacp_fields_array;
     $data = iacp_get_data();
     $counter = 1;
     
@@ -332,11 +322,30 @@ function iacp_migrate(){
         if(DEBUG_DATA){
             echo "Line " . $counter . ":" . PHP_EOL;
         }
-        foreach((array)$line as $field){
+        $postarr = [];
+        $meta_input = [];
+
+        foreach((array)$line as $index => $field){
             if(DEBUG_DATA){
                 echo $field . PHP_EOL;
             }
+
+            //You need a name for each field for this method
+            $wp_name = $iacp_fields_array[$index]->new_name;
+
+            //Custom fields need to go in their own array
+            if($iacp_fields_array[$index]->is_cust_field){
+                $meta_input[$wp_name] = $field;
+            }
+            else{
+                $postarr[$wp_name] = $field;
+            }
         }
+
+        //Insert the post!
+        $post_arr["meta_input"] = $meta_input;
+        wp_insert_post($postarr);
+
         if(DEBUG_DATA){ echo PHP_EOL; }
         $counter++;
     }
