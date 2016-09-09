@@ -113,7 +113,7 @@ function iacp_format_line($line){
 
         //If this field was empty, check to see if that was okay
         if(($tmp == "" || $tmp == null) && $i->required){
-            die("Required field " . $i->orig_name . " could not be found!");
+            wp_die("Required field " . $i->orig_name . " could not be found!");
         }
 
         $to_return[] = $tmp;
@@ -147,8 +147,8 @@ function iacp_get_connection_info($creds){
  * but only the required columns are necessary.
  */
 function iacp_read_query(){
-    $filename = "query.txt";
-    $f = fopen($filename, "r") or die("Unable to read query file!");
+    $filename = plugin_dir_path( __FILE__ ) . "query.txt";
+    $f = fopen($filename, "r") or wp_die("Unable to read query file!");
     $query = "";
 
     //Just want to turn the whole file into a single string.
@@ -175,8 +175,8 @@ function iacp_read_credentials(){
         "password" => ""
     ];
     
-    $filename = "credentials.txt";
-    $f = fopen($filename, "r") or die("Unable to read credentials file!");
+    $filename = plugin_dir_path( __FILE__ ) . "credentials.txt";
+    $f = fopen($filename, "r") or wp_die("Unable to read credentials file!");
 
     if(DEBUG_CREDS){echo "Beginning read..." . PHP_EOL;}
 
@@ -216,7 +216,7 @@ function iacp_read_credentials(){
     //If any of the fields wasn't found, fail
     foreach((array)$to_return as $key => $field){
         if(empty($field)){
-            die("Missing " . $key . "!" . PHP_EOL);
+            wp_die("Missing " . $key . "!" . PHP_EOL);
         }
     }
     
@@ -244,13 +244,14 @@ function iacp_get_data(){
 
     // Actually create connection
     echo "Connecting to " . $creds["server"] . "... ";
-    $conn = sqlsrv_connect($creds["server"], $connectionInfo) or die("Failed.");
+    $conn = sqlsrv_connect($creds["server"], $connectionInfo)
+          or wp_die("Failed.");
     echo "Connection opened." . PHP_EOL . PHP_EOL;
 
     //Perform the query
     $query = iacp_read_query();
     if(DEBUG_QUERY){ echo "Query: " . PHP_EOL . $query  . PHP_EOL;}
-    $resp = sqlsrv_query($conn, $query, []) or die("Query failed!");
+    $resp = sqlsrv_query($conn, $query, []) or wp_die("Query failed!");
 
     //Process the result
     $to_return = [];
@@ -317,7 +318,7 @@ function iacp_migrate(){
     global $iacp_fields_array;
     $data = iacp_get_data();
     $counter = 1;
-    
+
     foreach((array)$data as $line){
         if(DEBUG_DATA){
             echo "Line " . $counter . ":" . PHP_EOL;
@@ -348,13 +349,71 @@ function iacp_migrate(){
 
         if(DEBUG_DATA){ echo PHP_EOL; }
         $counter++;
+
+        //Only do once, as a test. That way, if something goes wrong, I can fix
+        //it without having to delete hundreds of old articles
+        break;
     }
+    
+    echo "Done.";
+    exit();
 }
 
-iacp_migrate();
 
-echo "Done.";
 
-exit;
+/* We want to perform the migration only  after a button has been pressed in the
+ * backend. Everything below this comment sets that up.
+ *
+ * Taken from http://stackoverflow.com/a/33958029
+ */
+
+function iacp_migrate_button_admin_page() {
+    // This function creates the output for the admin page.
+    // It also checks the value of the $_POST variable to see whether
+    // there has been a form submission. 
+    
+    // The check_admin_referer is a WordPress function that does some security
+    // checking and is recommended good practice.
+    
+    // General check for user permissions.
+    if (!current_user_can('manage_options'))  {
+        wp_die("You can't do this!");
+    }
+    
+    // Start building the page
+    
+    echo '<div class="wrap">';
+    
+    echo '<h2>IACP Magazine Article Migration</h2>';
+    
+    // Check whether the button has been pressed AND also check the nonce
+    if (isset($_POST['iacp_migrate_button'])
+        && check_admin_referer('iacp_migrate_button_clicked')) {
+        // the button has been pressed AND we've passed the security check
+        iacp_migrate();
+    }
+    
+    echo '<form action="options-general.php?page=iacp_migrate-button-slug"'
+        . 'method="post">';
+    
+    // this is a WordPress security feature
+    //see: https://codex.wordpress.org/WordPress_Nonces
+    wp_nonce_field('iacp_migrate_button_clicked');
+    echo '<input type="hidden" value="true" name="iacp_migrate_button" />';
+    submit_button('Call Function');
+    echo '</form>';
+    
+    echo '</div>';
+}
+
+function iacp_migrate_button_menu(){
+    add_menu_page('Migrate Old IACP Magazine Articles',
+                  'IACP Migration',
+                  'manage_options',
+                  'iacp_migrate-button-slug',
+                  'iacp_migrate_button_admin_page');
+
+}
+add_action('admin_menu', 'iacp_migrate_button_menu');
 
 ?>
