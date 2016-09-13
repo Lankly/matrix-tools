@@ -12,40 +12,71 @@
   Domain Path: /languages
 */
 
+error_reporting( E_ALL );
+ini_set( 'display_errors', true );
+
 /* OPTIONS */
 /* These are all called "Debug" not because they do any debugging on their own,
  * but rather because you should use them while debugging.
  */
-define("DEBUG", true);           /* Set to false to disable all other DEBUGs. */
+define("DEBUG", true);          /* Set to false to disable all other DEBUGs. */
 define("DEBUG_CREDS", DEBUG && false);        /* Echo credentials information */
 define("DEBUG_DATA", DEBUG && false);         /* Echo all exported data. */
 define("DEBUG_FIRST_LINE", DEBUG && false);   /* Echo first line information. */
+define("DEBUG_INSERT", DEBUG && true);        /* Echo each inserted post */
 define("DEBUG_QUERY", DEBUG && false);        /* Echo complete query. */
 define("DEBUG_QUERY_RESULTS", DEBUG && false);/* Echo the query results. */
+define("DONT_FILTER_POSTS", true);      /* Disable WP's filter before insert? */
 define("USE_CONNECTION_POOLING", false); /* Make a new connection every time? */
-define("USE_WINDOWS_AUTH", false);      /* Use Windows Auth to connect to db? */
+define("USE_UTF_8_CONVERSION", true);   /* Filter each field through UTF-8? */
+define("USE_WINDOWS_AUTH", false);       /* Use Windows Auth to connect to db? */
 
-/* Tell the user what options are in use. */
-if(DEBUG_CREDS){
-    echo "Credentials debugging enabled." . PHP_EOL;
-}
-if(DEBUG_DATA){
-    echo "Data debugging enabled." . PHP_EOL;
-}
-if(DEBUG_FIRST_LINE){
-    echo "First-line debugging enabled." . PHP_EOL;
-}
-if(DEBUG_CREDS || DEBUG_DATA || DEBUG_FIRST_LINE){
-    echo PHP_EOL;
-}
-if(USE_CONNECTION_POOLING){
-    echo "Connection Pooling for database connection enabled." . PHP_EOL;
-}
-if(USE_WINDOWS_AUTH){
-    echo "Windows Authorization for database connection enabled." . PHP_EOL;
-}
-if(USE_CONNECTION_POOLING || USE_WINDOWS_AUTH){
-    echo PHP_EOL;
+function display_options(){
+    //<br>s are separate so you can find-replace them with PHP_EOL easily.
+    if(DEBUG_CREDS){
+        echo "Credentials debugging enabled." . "<br>";
+    }
+    if(DEBUG_DATA){
+        echo "Data debugging enabled." . "<br>";
+    }
+    if(DEBUG_FIRST_LINE){
+        echo "First-line debugging enabled." . "<br>";
+    }
+    if(DEBUG_INSERT){
+        echo "Insert-post debugging enabled." . "<br>";
+    }
+    if(DEBUG_QUERY){
+        echo "Query debugging enabled." . "<br>";
+    }
+    if(DEBUG_QUERY_RESULTS){
+        echo "Query results debugging enabled" . "<br>";
+    }
+    if(DEBUG_CREDS
+       || DEBUG_DATA
+       || DEBUG_FIRST_LINE
+       || DEBUG_INSERT
+       || DEBUG_QUERY
+       || DEBUG_QUERY_RESULTS){
+        echo "<br>";
+    }
+    if(DONT_FILTER_POSTS){
+        echo "WordPress's insertion filter disabled." . "<br>";
+    }
+    if(USE_CONNECTION_POOLING){
+        echo "Connection Pooling for database connection enabled." . "<br>";
+    }
+    if(USE_UTF_8_CONVERSION){
+        echo "Conversion through UTF-8 enabled." . "<br>";
+    }
+    if(USE_WINDOWS_AUTH){
+        echo "Windows Authorization for database connection enabled." . "<br>";
+    }
+    if(USE_CONNECTION_POOLING
+       || USE_WINDOWS_AUTH
+       || USE_UTF_8_CONVERSION
+       || DONT_FILTER_POSTS){
+        echo "<br>";
+    }
 }
 
 /* CONSTANTS */
@@ -69,6 +100,7 @@ class IACPField {
     }
 }
 
+
 /* GLOBALS */
 
 /* Every field in this array is one that will be mapped to a field in the new
@@ -84,12 +116,12 @@ class IACPField {
  * a custom field, "true" should be passed as a fourth parameter.
  */
 $iacp_fields_array = [
-    new IACPField("article_id", "ID", FIELD_REQUIRED),
-    new IACPField("article_title", "post_title", FIELD_NOT_REQUIRED),
-    new IACPField("article_text", "post_content", FIELD_NOT_REQUIRED),
+    new IACPField("article_title", "post_title", FIELD_REQUIRED),
+    new IACPField("article_text", "post_content", FIELD_REQUIRED),
     new IACPField("author", "post_author", FIELD_NOT_REQUIRED, true),
     new IACPField("issue_date", "post_date", FIELD_NOT_REQUIRED)
 ];
+
 
 /* FUNCTIONS */
 
@@ -148,7 +180,8 @@ function iacp_get_connection_info($creds){
  */
 function iacp_read_query(){
     $filename = plugin_dir_path( __FILE__ ) . "query.txt";
-    $f = fopen($filename, "r") or wp_die("Unable to read query file!");
+    $f = fopen($filename, "r") or wp_die("Unable to read query file, "
+         . $filename . "!");
     $query = "";
 
     //Just want to turn the whole file into a single string.
@@ -176,13 +209,14 @@ function iacp_read_credentials(){
     ];
     
     $filename = plugin_dir_path( __FILE__ ) . "credentials.txt";
-    $f = fopen($filename, "r") or wp_die("Unable to read credentials file!");
+    $f = fopen($filename, "r") or wp_die("Unable to read credentials file, "
+         . $filename . "!");
 
-    if(DEBUG_CREDS){echo "Beginning read..." . PHP_EOL;}
+    if(DEBUG_CREDS){echo "Beginning read..." . "<br>";}
 
     //Run through the file and put each matching line into $to_return
     while(!empty($line = fgets($f))){
-        //No need for a PHP_EOL on this echo since $line will contain a newline
+        //No need for a "<br>" on this echo since $line will contain a newline
         if(DEBUG_CREDS){
             echo substr($line, 0, strlen($line) - 2);
         }
@@ -204,7 +238,7 @@ function iacp_read_credentials(){
         if(DEBUG_CREDS){
             echo " ("
                 . $to_return[$field] . ")"
-                . PHP_EOL;
+                . "<br>";
         }
     }
 
@@ -216,12 +250,12 @@ function iacp_read_credentials(){
     //If any of the fields wasn't found, fail
     foreach((array)$to_return as $key => $field){
         if(empty($field)){
-            wp_die("Missing " . $key . "!" . PHP_EOL);
+            wp_die("Missing " . $key . "!" . "<br>");
         }
     }
     
     if(DEBUG_CREDS){
-        echo "Done read." . PHP_EOL . PHP_EOL;
+        echo "Done read." . "<br>" . "<br>";
     }
     
     return $to_return;
@@ -244,18 +278,26 @@ function iacp_get_data(){
 
     // Actually create connection
     echo "Connecting to " . $creds["server"] . "... ";
-    $conn = sqlsrv_connect($creds["server"], $connectionInfo)
+    $conn = mssql_connect($creds["server"],
+                          $creds["username"],
+                          $creds["password"])
           or wp_die("Failed.");
-    echo "Connection opened." . PHP_EOL . PHP_EOL;
+    mssql_select_db($creds["database"], $conn );
+    echo "Connection opened." . "<br>" . "<br>";
 
     //Perform the query
     $query = iacp_read_query();
-    if(DEBUG_QUERY){ echo "Query: " . PHP_EOL . $query  . PHP_EOL;}
-    $resp = sqlsrv_query($conn, $query, []) or wp_die("Query failed!");
+    if(DEBUG_QUERY){ echo "Query: " . "<br>" . $query  . "<br>";}
+    $resp = mssql_query($query, $conn) or wp_die("Query failed!");
+    $num_rows = mssql_num_rows($resp);
 
+    if($num_rows <= 0){
+        wp_die("Query returned no results!");
+    }
+    
     //Process the result
     $to_return = [];
-    while($obj = sqlsrv_fetch_object( $resp )){
+    while($obj = mssql_fetch_array($resp, MSSQL_ASSOC)){
         $line = [];
 
         /* If a required field is missing from the line, we want to skip adding
@@ -273,15 +315,24 @@ function iacp_get_data(){
         foreach((array)$iacp_fields_array as $field){
             //Grab the next field and drop it into the array
             $prop_name = $field->orig_name;
-            $value = $obj->$prop_name;
-            $line[] = $value;
-
-            //Check for missing data from required field.
-            if($field->required == FIELD_REQUIRED && empty($value)){
-                echo "Missing required field! Skipping line.";
-                $all_required_fields_accounted_for = false;
-                break;
+            $value = $obj[$prop_name];
+            
+            //Check for missing data. If required, skip the line. If not, N/A
+            if(empty($value)){
+                if($field->required == FIELD_REQUIRED){
+                    if(DEBUG_QUERY){
+                        echo "Missing required field! Skipping line." . "<br>";
+                    }
+                    $all_required_fields_accounted_for = false;
+                    break;
+                }
+                else{
+                    $value = "N/A";
+                }
             }
+            
+            $line[] = $value;
+            
             
             if(DEBUG_QUERY_RESULTS){
                 /* Since some fields can be excessively long, restrict them to
@@ -297,17 +348,17 @@ function iacp_get_data(){
         }
         
         //Two newlines after to guarantee readability
-        if(DEBUG_QUERY_RESULTS){ echo PHP_EOL . PHP_EOL; }
+        if(DEBUG_QUERY_RESULTS){ echo "<br>" . "<br>"; }
     }
 
-    echo count($to_return) . " records imported." . PHP_EOL . PHP_EOL;
+    echo count($to_return) . " records imported." . "<br>" . "<br>";
     
     // Close connection when done.
     if(!empty($conn)){
         echo "Closing connection...  ";
-        sqlsrv_close($conn);
+        mssql_close($conn);
     }
-    echo "Connection Closed." . PHP_EOL . PHP_EOL;
+    echo "Connection Closed." . "<br>" . "<br>";
     
     return $to_return;
 }
@@ -315,21 +366,34 @@ function iacp_get_data(){
 /* Performs the data migration.
  */
 function iacp_migrate(){
+    display_options();
+    
     global $iacp_fields_array;
     $data = iacp_get_data();
     $counter = 1;
+    
+    putenv("FREETDSCONF=/etc/freetds/freetds.conf");
 
+    //Disable filter - see long comment below
+    if(DONT_FILTER_POSTS){
+        echo "Removing filters...";
+        kses_remove_filters();
+        echo "Done." . "<br>";
+    }
+        
     foreach((array)$data as $line){
         if(DEBUG_DATA){
-            echo "Line " . $counter . ":" . PHP_EOL;
+            echo "Line " . $counter . ":" . "<br>";
         }
         $postarr = [];
         $meta_input = [];
 
         foreach((array)$line as $index => $field){
             if(DEBUG_DATA){
-                echo $field . PHP_EOL;
+                echo $field . "<br>";
             }
+
+            $field = mb_convert_encoding($field, 'UTF-8', 'UTF-8');
 
             //You need a name for each field for this method
             $wp_name = $iacp_fields_array[$index]->new_name;
@@ -345,17 +409,62 @@ function iacp_migrate(){
 
         //Insert the post!
         $postarr["meta_input"] = $meta_input;
+        if(DEBUG_INSERT){
+            /* Important to note that if the value doesn't show up, it's because
+             * htmlSpecialChars returns empty if it's given an invalid html code
+             * unit sequence.
+             *
+             * WordPress sanitizes everything before putting it in the database,
+             * and if the post_content string after that sanitation is emtpy, it
+             * simply won't insert that post (I think).
+             *
+             * So, if the post_content value doesn't show up, that post won't be
+             * created.
+             *
+             * I have found a workaround that disables the filter before you try
+             * to insert a post. This means that the insert could potentially be
+             * dangerous to the site. If you want this filter removed, go to the
+             * top and set the "DONT_FILTER_POSTS" option to true.
+             *
+             * As another solution to this problem, you can turn on this option:
+             * USE_UTF_8_CONVERSION
+             */
+            foreach((array)$postarr as $key => $val){
+                if(strcmp($key, "meta_input") == 0){
+                    foreach((array)$val as $k => $v){
+                        echo "<br>"
+                            . $k
+                            . ": "
+                            . htmlspecialchars($v);
+                    }
+                }
+                else{
+                    echo "<br>"
+                        . $key
+                        . ": "
+                        . htmlspecialchars($val);
+                }
+            }
+        }
         wp_insert_post($postarr);
 
-        if(DEBUG_DATA){ echo PHP_EOL; }
+        if(DEBUG_DATA){ echo "<br>"; }
         $counter++;
 
-        //Only do once, as a test. That way, if something goes wrong, I can fix
+        //Only a few, as a test. That way, if something goes wrong, I can fix
         //it without having to delete hundreds of old articles
-        break;
+        if($counter > 5){
+            break;
+        }
+    }
+
+    if(DONT_FILTER_POSTS){
+        echo "Turning filters back on...";
+        kses_init_filters();
+        echo "Done." . "<br>";
     }
     
-    echo "Done.";
+    echo "<br>Done.";
     exit();
 }
 
@@ -400,7 +509,7 @@ function iacp_migrate_button_admin_page() {
     //see: https://codex.wordpress.org/WordPress_Nonces
     wp_nonce_field('iacp_migrate_button_clicked');
     echo '<input type="hidden" value="true" name="iacp_migrate_button" />';
-    submit_button('Call Function');
+    submit_button('Migrate!');
     echo '</form>';
     
     echo '</div>';
