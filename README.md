@@ -88,3 +88,15 @@ DEBUG_INSERT:
 ```
 <b>Off</b> by default.<br>
 Prints out all the information from each post right before that post is inserted.
+
+```php
+DEBUG_QUERY:
+```
+<b>Off</b> by default<br>
+Prints out the query as it's read in from the query file.
+
+```php
+DEBUG_QUERY_RESULTS:
+```
+<b>Off</b> by default<br>
+Prints out the results of the query as they are read in, row by row.
