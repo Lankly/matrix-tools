@@ -26,10 +26,12 @@ define("DEBUG_FIRST_LINE", DEBUG && false);   /* Echo first line information. */
 define("DEBUG_INSERT", DEBUG && false);       /* Echo each inserted post */
 define("DEBUG_QUERY", DEBUG && false);        /* Echo complete query. */
 define("DEBUG_QUERY_RESULTS", DEBUG && false);/* Echo the query results. */
-define("DONT_FILTER_POSTS", true);      /* Disable WP's filter before insert? */
+
+define("DONT_FILTER_POSTS", true);     /* Disable WP's filter before insert? */
+define("IMPORT_PUBLISHED", true); /* Should each imported post be published?  */
 define("USE_CONNECTION_POOLING", false); /* Make a new connection every time? */
 define("USE_UTF_8_CONVERSION", true);   /* Filter each field through UTF-8? */
-define("USE_WINDOWS_AUTH", false);       /* Use Windows Auth to connect to db? */
+define("USE_WINDOWS_AUTH", false);      /* Use Windows Auth to connect to db? */
 
 function display_options(){
     //<br>s are separate so you can find-replace them with PHP_EOL easily.
@@ -62,6 +64,9 @@ function display_options(){
     if(DONT_FILTER_POSTS){
         echo "WordPress's insertion filter disabled." . "<br>";
     }
+    if(IMPORT_PUBLISHED){
+        echo "Each imported post will be set to published." . "<br";
+    }
     if(USE_CONNECTION_POOLING){
         echo "Connection Pooling for database connection enabled." . "<br>";
     }
@@ -74,7 +79,8 @@ function display_options(){
     if(USE_CONNECTION_POOLING
        || USE_WINDOWS_AUTH
        || USE_UTF_8_CONVERSION
-       || DONT_FILTER_POSTS){
+       || DONT_FILTER_POSTS
+       || IMPORT_PUBLISHED){
         echo "<br>";
     }
 }
@@ -88,15 +94,21 @@ define("FIELD_REQUIRED", true);
  * names and where they are.
  */
 class IACPField {
-    public $is_cust_field; /* True if this is a custom field in WP */
-    public $new_name;  /* Field in the WP db */
     public $orig_name; /* Field in the csv */
+    public $new_name;  /* Field in the WP db */
     public $required;  /* Whether or not the field can be blank */
-    function __construct($orig_name, $new_name, $req, $cust = false){
+    public $is_cust_field; /* True if this is a custom field in WP */
+    public $strip_html; /* True if this field should strip out all HTML tags */
+    function __construct($orig_name,
+                         $new_name,
+                         $req,
+                         $cust = false,
+                         $html = false){
         $this->orig_name = $orig_name;
         $this->new_name = $new_name;
         $this->required = $req;
         $this->is_cust_field = $cust;
+        $this->strip_html = $html;
     }
 }
 
@@ -118,41 +130,16 @@ class IACPField {
 $iacp_fields_array = [
     new IACPField("article_title", "post_title", FIELD_REQUIRED),
     new IACPField("article_text", "post_content", FIELD_REQUIRED),
-    new IACPField("author", "post_author", FIELD_NOT_REQUIRED, true),
-    new IACPField("issue_date", "post_date", FIELD_NOT_REQUIRED)
+    new IACPField("author", "post_author", FIELD_NOT_REQUIRED, true, true),
+    new IACPField("issue_date", "post_date", FIELD_NOT_REQUIRED),
+    new IACPField("legacy_article_id",
+                  "legacy_article_id", FIELD_NOT_REQUIRED, true),
+    new IACPField("legacy_issue_id",
+                  "legacy_issue_id", FIELD_NOT_REQUIRED, true)
 ];
 
 
 /* FUNCTIONS */
-
-/* This function should only ever be called after iacp_read_first_line. It
- * expects the col_num field of the 
- */
-function iacp_format_line($line){
-    if(!$line){
-        return ["Empty line."];
-    }
-
-    //Put each field into its correct place in the new array
-    $fields = explode(",", $line);
-    $to_return = [];
-    foreach((array)$iacp_fields_array as $i){
-        if($i->COLUMN_NOT_FOUND){
-            continue;
-        }
-        
-        $tmp = $fields[$i->col_num];
-
-        //If this field was empty, check to see if that was okay
-        if(($tmp == "" || $tmp == null) && $i->required){
-            wp_die("Required field " . $i->orig_name . " could not be found!");
-        }
-
-        $to_return[] = $tmp;
-    }
-
-    return $to_return;
-}
 
 /* Small little function to generate the second argument for sqlsrv_connect().
  * It takes into account the options at the top of the file. Returns an array.
@@ -330,7 +317,13 @@ function iacp_get_data(){
                     $value = "N/A";
                 }
             }
-            
+
+            //Should we remove the HTML from this field?
+            if($field->strip_html){
+                $value = strip_tags($value);
+            }
+
+            //Add the value to the line's array
             $line[] = $value;
             
             
@@ -446,7 +439,12 @@ function iacp_migrate(){
                 }
             }
         }
-        wp_insert_post($postarr);
+        $post_id = wp_insert_post($postarr);
+
+        //Publish the post, if desired
+        if(IMPORT_PUBLISHED && $post_id > 0){
+            wp_publish_post($post_id);
+        }
 
         if(DEBUG_DATA){ echo "<br>"; }
         $counter++;
