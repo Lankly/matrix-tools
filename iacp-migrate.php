@@ -23,7 +23,7 @@ define("DEBUG", true);          /* Set to false to disable all other DEBUGs. */
 define("DEBUG_CREDS", DEBUG && false);        /* Echo credentials information */
 define("DEBUG_DATA", DEBUG && false);         /* Echo all exported data. */
 define("DEBUG_FIRST_LINE", DEBUG && false);   /* Echo first line information. */
-define("DEBUG_INSERT", DEBUG && true);        /* Echo each inserted post */
+define("DEBUG_INSERT", DEBUG && false);       /* Echo each inserted post */
 define("DEBUG_QUERY", DEBUG && false);        /* Echo complete query. */
 define("DEBUG_QUERY_RESULTS", DEBUG && false);/* Echo the query results. */
 define("DONT_FILTER_POSTS", true);      /* Disable WP's filter before insert? */
@@ -370,7 +370,7 @@ function iacp_migrate(){
     
     global $iacp_fields_array;
     $data = iacp_get_data();
-    $counter = 1;
+    $counter = 0;
     
     putenv("FREETDSCONF=/etc/freetds/freetds.conf");
 
@@ -450,14 +450,10 @@ function iacp_migrate(){
 
         if(DEBUG_DATA){ echo "<br>"; }
         $counter++;
-
-        //Only a few, as a test. That way, if something goes wrong, I can fix
-        //it without having to delete hundreds of old articles
-        if($counter > 5){
-            break;
-        }
     }
 
+    echo $counter . " records inserted." . "<br>";
+    
     if(DONT_FILTER_POSTS){
         echo "Turning filters back on...";
         kses_init_filters();
