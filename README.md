@@ -20,6 +20,7 @@ This tool was created to move data from a MSSQL server to WordPress posts for IA
     * <p>Add all the columns returned by your query to the `$iacp_fields_array`. Every field in this array is one that will be mapped to a field in the new database.</p>
     <p>If any of the fields still have the default value after the file has been read, the program should fail. The first parameter is the name of a column from the query we're exporting from. The second is that same field in the database we're importing to. If you want two fields to become one, change the query to combine them first.</p>
     <p>Please see the documentation for [`wp_insert_post()`](https://developer.wordpress.org/reference/functions/wp_insert_post/). The second field should be one of the names under `$postarr` or the name of a custom field. If it is a custom field, "true" should be passed as a fourth parameter.</p>
+    <p> Additionally, there are two optional fields, both booleans. The first one allows you to specify that the data will be going into a custom field. The second lets you specify that any HTML/PHP tags should be stripped from this field before it's inserted. Both are false by default.</p>
     * Examine the options at the top of the file and turn on the ones you want to use. (See the [Options](#options) section below)
 6. Zip the entire folder and submit it to your WordPress site as a plugin, then enable it.
 
@@ -37,6 +38,12 @@ DONT_FILTER_POSTS:
 ```
 <b>On</b> by default.<br>
 Normally, WordPress sanitizes all the fields that you enter into the post. Set this to true to disable this while the records are being created.
+
+```php
+IMPORT_PUBLISHED:
+```
+<b>On</b> by default.<br>
+The default status for an inserted post is "draft". This option makes it be "publish" instead.
 
 ```php
 USE_CONNECTION_POOLING:
