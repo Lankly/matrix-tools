@@ -313,9 +313,9 @@ function iacp_get_data(){
                     $all_required_fields_accounted_for = false;
                     break;
                 }
-                else{
-                    $value = "N/A";
-                }
+                //I once had an else here that made empty nonrequired fields
+                //be replaced with "N/A". So, if you want to do something
+                //similar, I've let this structure be.
             }
 
             //Should we remove the HTML from this field?
@@ -439,12 +439,14 @@ function iacp_migrate(){
                 }
             }
         }
-        $post_id = wp_insert_post($postarr);
-
+        
         //Publish the post, if desired
-        if(IMPORT_PUBLISHED && $post_id > 0){
-            wp_publish_post($post_id);
+        if(IMPORT_PUBLISHED){
+            $postarr["post_status"] = "publish";
         }
+        
+        wp_insert_post($postarr);
+
 
         if(DEBUG_DATA){ echo "<br>"; }
         $counter++;
@@ -464,7 +466,7 @@ function iacp_migrate(){
 
 
 
-/* We want to perform the migration only  after a button has been pressed in the
+/* We want to perform the migration only after a button has been pressed in the
  * backend. Everything below this comment sets that up.
  *
  * Taken from http://stackoverflow.com/a/33958029
