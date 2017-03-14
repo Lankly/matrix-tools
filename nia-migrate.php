@@ -465,7 +465,17 @@ function nia_migrate(){
     }
 
     //Construct the addition
-    $images = "";
+    $images = "<div id=\"images\">";
+    for($i = 0; i < $imagecount; $i++){
+        $cur_file = $filename . "_" . $i;
+        $caption = nia_get_file_caption($cur_file);
+        
+        $images .= "<div id=\"figures\">";
+        $images .= "<img href=\"" . $cur_file . "t.jpg />";
+        $images .= "<p>" . $caption . "</p>";
+        $iamges .= "</div>"
+    }
+    $images .= "</div>"
     
     //Update the post!
     $postarr["ID"] = $post->ID;
