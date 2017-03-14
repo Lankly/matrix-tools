@@ -133,14 +133,10 @@ class NIAField {
  * a custom field, "true" should be passed as a fourth parameter.
  */
 $nia_fields_array = [
-  new NIAField("article_title", "post_title", FIELD_REQUIRED),
-  new NIAField("authors", "tax_input", FIELD_NOT_REQUIRED),
-  new NIAField("issue_date", "post_date", FIELD_NOT_REQUIRED),
-  new NIAField("topics", "post_category", FIELD_NOT_REQUIRED),
-  new NIAField("legacy_article_id",
-               "legacy_article_id", FIELD_NOT_REQUIRED, true),
-  new NIAField("legacy_issue_id",
-               "legacy_issue_id", FIELD_NOT_REQUIRED, true)
+  new NIAField("BaseURL", "", FIELD_REQUIRED),
+  new NIAField("FileName", "", FIELD_REQUIRED),
+  new NIAField("ImageCount", "", FIELD_REQUIRED),
+  new NIAField("EndURL", "", FIELD_REQUIRED),
 ];
 
 
@@ -162,6 +158,49 @@ function nia_get_connection_info($creds){
   }
 
   return $connectionInfo;
+}
+
+/* Takes in the name of an image, minus the extension, like: IO031201_01
+ */
+function nia_get_file_caption($file){
+    $creds = nia_read_credentials();
+    $connectionInfo = nia_get_connection_info($creds);
+
+    echo "Querying for caption of " . $file . "<br>";
+    ini_set('mssql.charset', 'UTF-8'); //Turn on Unicode
+    $conn = mssql_connect($creds["server"],
+                          $creds["username"],
+                          $creds["password"])
+          or wp_die("Failed to connect.");
+    mssql_select_db($creds["database"], $conn );
+
+    $query = "SELECT PhotoCaption, PhotoID"
+           . "FROM PhotoCaption"
+           . "WHERE PhotoID LIKE '" . $file . "%'";
+    $resp = mssql_query($query, $conn) or wp_die("Failed to query.");
+    $num_rows = mssql_num_rows($resp);
+    $ret = "";
+    
+    if($num_rows <= 0){
+        echo "Failed to return any results!" . "<br>";
+    }
+    else{
+        $obj = mssql_fetch_array($resp);
+        $caption = $obj["PhotoCaption"];
+
+        if(is_null($caption)){
+            echo "Invalid result!" . "<br>";
+        }
+        else{
+            $ret = $caption;
+        }
+    }
+    
+    if(!empty($conn)){
+        mssql_close($conn);
+    }
+    
+    return "";
 }
 
 /* Returns the query in 'query.txt' to be performed on the database in
@@ -370,6 +409,23 @@ function nia_get_data(){
   return $to_return;
 }
 
+function nia_get_wp_post_from_lid($legacy_id){
+    $args = array(
+        'post_type' => POST_TYPE,
+        'meta_query' => array(
+            array(
+                'key' => 'legacy_article_id',
+                'value' => $legacy_id,
+                'compare' => 'LIKE'
+            )
+        ));
+    $res = query_posts($args);
+    if(!empty($res)){
+        return $res[0];
+    }
+    return null;
+}
+
 /* Performs the data migration.
  */
 function nia_migrate(){
@@ -396,125 +452,50 @@ function nia_migrate(){
     $meta_input = [];
     $tax_input = [];
 
-    /* Post type will be the same for all posts */
-    $postarr["post_type"] = POST_TYPE;
-        
-    foreach((array)$line as $index => $field){
-      if(DEBUG_DATA){
-        echo $field . "<br>";
-      }
+    $baseurl = $line["BaseURL"];
+    $filename = $line["FileName"];
+    $imagecount = $line["ImageCount"];
+    $endurl = $line["EndURL"];
+    
+    $post = nia_get_wp_post_from_lid($filename);
 
-      if(USE_UTF_8_CONVERSION){
-        $field = mb_convert_encoding($field, 'UTF-8', 'UTF-8');
-      }
-
-      //You need a name for each field for this method
-      $wp_name = $nia_fields_array[$index]->new_name;
-
-      //Custom fields need to go in their own array
-      if($nia_fields_array[$index]->is_cust_field){
-        $meta_input[$wp_name] = $field;
-      }
-      //Tax_inputs need to go in their own array
-      //Might want to handle meta_input fields similarly
-      else if(strcmp($wp_name, "tax_input") == 0){
-        //field is guaranteed to be an array
-        //Use the orig_name as which custom taxonomy to check off
-        //Non-hierarchical taxonomies only.
-        $tax_input[$nia_fields_array[$index]->orig_name] = $field;
-      }
-      else{
-        $postarr[$wp_name] = $field;
-      }
-
-            
-
-      /* CUSTOM SECTION FOR NIA - REMOVE THIS FROM OTHER PROJECTS
-       * NIA's old database didn't store article content in the database
-       * for whatever reason. Instead, the article's ID mapped to a file
-       * on the server that contained that text. So, we need to open the
-       * corresponding file and save it to the post_content. Simply drop
-       * all the files into the plugin zip.
-       */
-      if(strcmp($wp_name, "legacy_article_id")){
-        //Open the file
-        $filename = plugin_dir_path( __FILE__ ) . $field;
-        $f = fopen($filename, "r");
-
-        //If failed to open file, don't do anything
-        if(!$f){
-          continue;
-        }
-                
-        //Copy contents out
-        $content = "";
-        while(!empty($line = fgets($f))){
-          $content = $content . $line;
-        }
-                
-        //Don't forget to close the file!
-        if($f){
-          fclose($f);
-        }
-                
-        //Add to postarr
-        $postarr[post_content] = $content;
-      }
+    if(is_null($post)){
+        echo $filename . " has no matching WordPress post." . "<br>";
+        continue;
     }
 
-    //Insert the post!
-    $postarr["meta_input"] = $meta_input;
-    $postarr["tax_input"] = $tax_input;
-    if(DEBUG_INSERT){
-      /* Important to note that if the value doesn't show up, it's because
-       * htmlSpecialChars returns empty if it's given an invalid html code
-       * unit sequence.
-       *
-       * WordPress sanitizes everything before putting it in the database,
-       * and if the post_content string after that sanitation is emtpy, it
-       * simply won't insert that post (I think).
-       *
-       * So, if the post_content value doesn't show up, that post won't be
-       * created.
-       *
-       * I have found a workaround that disables the filter before you try
-       * to insert a post. This means that the insert could potentially be
-       * dangerous to the site. If you want this filter removed, go to the
-       * top and set the "DONT_FILTER_POSTS" option to true.
-       *
-       * As another solution to this problem, you can turn on this option:
-       * USE_UTF_8_CONVERSION
-       */
-      foreach((array)$postarr as $key => $val){
-        if(strcmp($key, "meta_input") == 0){
-          foreach((array)$val as $k => $v){
-            echo "<br>"
-              . $k
-              . ": "
-              . htmlspecialchars($v);
-          }
-        }
-        else{
-          echo "<br>"
-            . $key
-            . ": "
-            . htmlspecialchars($val);
-        }
-      }
-    }
-        
-    //Publish the post, if desired
-    if(IMPORT_PUBLISHED){
-      $postarr["post_status"] = "publish";
-    }
-        
-    wp_insert_post($postarr);
+    //Construct the addition
+    $images = "";
+    
+    //Update the post!
+    $postarr["ID"] = $post->ID;
+    $postarr["post_author"] = $post->post_author;
+    $postarr["post_name"] = $post->post_name;
+    $postarr["post_type"] = $post->post_type;
+    $postarr["post_title"] = $post->post_title;
+    $postarr["post_date"] = $post->post_date;
+    $postarr["post_date_gmt"] = $post->post_date_gmt;
+    
+    $postarr["post_content"] = $post->post_content . $images;
+    
+    $postarr["post_excerpt"] = $post->post_excerpt;
+    $postarr["post_status"] = $post->post_status;
+    $postarr["comment_status"] = $post->comment_status;
+    $postarr["ping_status"] = $post->ping_status;
+    $postarr["post_status"] = $post->post_status;
+    $postarr["post_parent"] = $post->post_parent;
+    $postarr["post_modified"] = $post->post_modified;
+    $postarr["post_modified_gmt"] = $post->post_modified_gmt;
+    $postarr["comment_count"] = $post->comment_count;
+    $postarr["menu_order"] = $post->menu_order;
+    wp_update_post($postarr);
+    echo "Updated " . $filename . "." . "<br>";
 
 
     if(DEBUG_DATA){ echo "<br>"; }
     $counter++;
 
-    if($counter > 3){
+    if($counter > 0){
       break;
     }
   }
